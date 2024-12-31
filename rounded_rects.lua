@@ -30,7 +30,7 @@ local math = math
 local Material = Material
 local SetDrawColor = surface.SetDrawColor
 local SetMaterial = surface.SetMaterial
-local DrawTexturedRect = surface.DrawTexturedRect
+local DrawTexturedRectUV = surface.DrawTexturedRectUV
 
 local DIR = ADDON_NAME:lower() .. "/rounded_rects/"
 file.CreateDir(DIR)
@@ -52,7 +52,7 @@ function html:OnCallback(_, _, args)
     local id, data = args[1], args[2]
     local path = DIR .. util.SHA256(id) .. ".png"
     file.Write(path, util.Base64Decode(data))
-    MATERIALS[id] = Material("data/" .. path, "noclamp")
+    MATERIALS[id] = Material("data/" .. path)
     QUEUED[id] = nil
     MsgC(COL_BLUE, "[Rounded Rects]", COL_WHITE, " Generated rounded rect with ID ", COL_GREEN, id, "\n")
 end
@@ -137,7 +137,7 @@ local function generate_rounded_rect(w, h, tl, tr, bl, br)
     do
         local path = DIR .. util.SHA256(ID) .. ".png"
         if file.Exists(path, "DATA") then
-            MATERIALS[ID] = Material("data/" .. path, "noclamp")
+            MATERIALS[ID] = Material("data/" .. path)
             if not MATERIALS[ID]:IsError() then
                 return ID
             end
@@ -172,7 +172,13 @@ local function internal_draw(id, x, y, w, h, col)
         SetDrawColor(255, 255, 255, 255)
     end
     SetMaterial(mat)
-    DrawTexturedRect(x, y, w, h)
+    -- https://gmodwiki.com/surface.DrawTexturedRectUV
+    local u0, v0, u1, v1 = 0, 0, 1, 1
+    local du = 0.5 / w -- half pixel anticorrection
+    local dv = 0.5 / h -- half pixel anticorrection
+    u0, v0 = (u0 - du) / (1 - 2 * du), (v0 - dv) / (1 - 2 * dv)
+    u1, v1 = (u1 - du) / (1 - 2 * du), (v1 - dv) / (1 - 2 * dv)
+    DrawTexturedRectUV(x, y, w, h, u0, v0, u1, v1)
 end
 
 local function DrawEx2(x, y, w, h, col, tl, tr, bl, br)
