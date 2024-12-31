@@ -26,7 +26,6 @@ local ADDON_NAME = "YOUR_ADDON_NAME"
 local util = util
 local file = file
 local math = math
-local string = string
 
 local Material = Material
 local SetDrawColor = surface.SetDrawColor
@@ -213,7 +212,7 @@ local function generate_rounded_rect(w, h, tl, tr, bl, br, image_id, image_data)
         math.floor(bl),
         math.floor(br)
 
-    image_data = (image_id and image_data) and "\"" .. string.JavascriptSafe(image_data) .. "\"" or "null"
+    image_data = (image_id and image_data) and "\"" .. util.Base64Encode(image_data, true) .. "\"" or "null"
 
     local code = [[
         generateRoundedRect('%s', %u, %u, %u, %u, %u, %u, %s);
