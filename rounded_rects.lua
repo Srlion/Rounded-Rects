@@ -52,7 +52,7 @@ function html:OnCallback(_, _, args)
     local id, data = args[1], args[2]
     local path = DIR .. util.SHA256(id) .. ".png"
     file.Write(path, util.Base64Decode(data))
-    MATERIALS[id] = Material("data/" .. path)
+    MATERIALS[id] = Material("data/" .. path, "noclamp")
     QUEUED[id] = nil
     MsgC(COL_BLUE, "[Rounded Rects]", COL_WHITE, " Generated rounded rect with ID ", COL_GREEN, id, "\n")
 end
@@ -137,7 +137,7 @@ local function generate_rounded_rect(w, h, tl, tr, bl, br)
     do
         local path = DIR .. util.SHA256(ID) .. ".png"
         if file.Exists(path, "DATA") then
-            MATERIALS[ID] = Material("data/" .. path)
+            MATERIALS[ID] = Material("data/" .. path, "noclamp")
             if not MATERIALS[ID]:IsError() then
                 return ID
             end
