@@ -26,6 +26,7 @@ local ADDON_NAME = "YOUR_ADDON_NAME"
 local util = util
 local file = file
 local math = math
+local string = string
 
 local Material = Material
 local SetDrawColor = surface.SetDrawColor
@@ -48,58 +49,116 @@ html:NewObjectCallback("lua", "callback")
 local COL_WHITE = Color(255, 255, 255)
 local COL_GREEN = Color(51, 184, 100)
 local COL_BLUE = Color(92, 192, 254)
+local COL_RED = Color(255, 0, 0)
 function html:OnCallback(_, _, args)
-    local id, data = args[1], args[2]
+    local success, id, data = args[1], args[2], args[3]
+    QUEUED[id] = nil
+    if not success then
+        MsgC(COL_BLUE, "[Rounded Rects]", COL_RED, " Failed to generate rounded rect with ID ", COL_GREEN, id, COL_WHITE, ": ", data, "\n")
+        return
+    end
     local path = DIR .. util.SHA256(id) .. ".png"
     file.Write(path, util.Base64Decode(data))
     MATERIALS[id] = Material("data/" .. path)
-    QUEUED[id] = nil
     MsgC(COL_BLUE, "[Rounded Rects]", COL_WHITE, " Generated rounded rect with ID ", COL_GREEN, id, "\n")
 end
 
 html:SetHTML([=[
 <script>
-  function generateRoundedRect(width, height, roundTL, roundTR, roundBL, roundBR) {
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
+  function generateRoundedRect(id, width, height, roundTL, roundTR, roundBL, roundBR, imageData) {
+    var canvas = document.createElement('canvas');
+    var context = canvas.getContext('2d');
 
-    const ctx = canvas.getContext('2d');
-    ctx.beginPath();
+    var hasImage = !!imageData;
+    var scaleFactor = hasImage ? 2 : 1;
+    canvas.width = width * scaleFactor;
+    canvas.height = height * scaleFactor;
 
-    ctx.moveTo(roundTL, 0);
+    function drawRoundedRectangle() {
+      context.beginPath();
+      context.moveTo(roundTL * scaleFactor, 0);
 
-    ctx.lineTo(width - roundTR, 0);
-    if (roundTR > 0) {
-      ctx.arcTo(width, 0, width, roundTR, roundTR);
+      context.lineTo(canvas.width - (roundTR * scaleFactor), 0);
+      if (roundTR > 0) {
+        context.arcTo(canvas.width, 0, canvas.width, roundTR * scaleFactor, roundTR * scaleFactor);
+      }
+
+      context.lineTo(canvas.width, canvas.height - (roundBR * scaleFactor));
+      if (roundBR > 0) {
+        context.arcTo(canvas.width, canvas.height, canvas.width - (roundBR * scaleFactor), canvas.height, roundBR * scaleFactor);
+      }
+
+      context.lineTo(roundBL * scaleFactor, canvas.height);
+      if (roundBL > 0) {
+        context.arcTo(0, canvas.height, 0, canvas.height - (roundBL * scaleFactor), roundBL * scaleFactor);
+      }
+
+      context.lineTo(0, roundTL * scaleFactor);
+      if (roundTL > 0) {
+        context.arcTo(0, 0, roundTL * scaleFactor, 0, roundTL * scaleFactor);
+      }
+
+      context.closePath();
+      context.fillStyle = "white";
+      context.fill();
     }
 
-    ctx.lineTo(width, height - roundBR);
-    if (roundBR > 0) {
-      ctx.arcTo(width, height, width - roundBR, height, roundBR);
+    function drawImage(img) {
+      context.save();
+      context.clip();
+
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
+
+      context.drawImage(img, 0, 0, canvas.width, canvas.height);
+      context.restore();
     }
 
-    ctx.lineTo(roundBL, height);
-    if (roundBL > 0) {
-      ctx.arcTo(0, height, 0, height - roundBL, roundBL);
+    drawRoundedRectangle();
+    if (!hasImage) {
+      const base64Data = canvas.toDataURL("image/png").split(",")[1];
+      lua.callback(true, id, base64Data);
+      return
     }
 
-    ctx.lineTo(0, roundTL);
-    if (roundTL > 0) {
-      ctx.arcTo(0, 0, roundTL, 0, roundTL);
+    var img = new Image();
+    img.onload = function () {
+      drawImage(img);
+
+      var outputCanvas = document.createElement('canvas');
+      var outputContext = outputCanvas.getContext('2d');
+      outputCanvas.width = width;
+      outputCanvas.height = height;
+
+      outputContext.drawImage(canvas, 0, 0, outputCanvas.width, outputCanvas.height);
+
+      var result = outputCanvas.toDataURL('image/png').split(',')[1];
+      lua.callback(true, id, result);
+    };
+
+    img.onerror = function () {
+      lua.callback(false, id, "Failed to load image.");
+    };
+
+    var mimeType;
+    if (imageData.charAt(0) === '/') {
+      mimeType = 'image/jpeg';
+    } else if (imageData.charAt(0) === 'i') {
+      mimeType = 'image/png';
+    } else {
+      lua.callback(false, id, "Invalid image data.");
+      return;
     }
 
-    ctx.closePath();
-    ctx.fillStyle = "white";
-    ctx.fill();
-
-    const base64Data = canvas.toDataURL("image/png").split(",")[1];
-    return base64Data;
+    img.src = 'data:' + mimeType + ';base64,' + imageData;
   }
 </script>
 ]=])
 
-local function get_id(w, h, tl, tr, bl, br)
+local function get_id(w, h, tl, tr, bl, br, image_id)
+    if image_id then
+        return w .. "_" .. h .. "_" .. tl .. "_" .. tr .. "_" .. bl .. "_" .. br .. "_" .. image_id
+    end
     return w .. ";" .. h .. ";" .. tl .. ";" .. tr .. ";" .. bl .. ";" .. br
 end
 
@@ -118,7 +177,7 @@ local function math_floor_min(a, b)
     return (math.floor(math.min(a, b)))
 end
 
-local function generate_rounded_rect(w, h, tl, tr, bl, br)
+local function generate_rounded_rect(w, h, tl, tr, bl, br, image_id, image_data)
     w, h = math.floor(w), math.floor(h)
 
     local max_roundness = math.min(w, h) / 2
@@ -128,7 +187,7 @@ local function generate_rounded_rect(w, h, tl, tr, bl, br)
         math_floor_min(bl, max_roundness),
         math_floor_min(br, max_roundness)
 
-    local ID = get_id(w, h, tl, tr, bl, br)
+    local ID = get_id(w, h, tl, tr, bl, br, image_id)
 
     if QUEUED[ID] or MATERIALS[ID] then
         return ID
@@ -154,11 +213,12 @@ local function generate_rounded_rect(w, h, tl, tr, bl, br)
         math.floor(bl),
         math.floor(br)
 
+    image_data = (image_id and image_data) and "\"" .. string.JavascriptSafe(image_data) .. "\"" or "null"
+
     local code = [[
-        var pngBytes = generateRoundedRect(%u, %u, %u, %u, %u, %u);
-        lua.callback('%s', pngBytes);
+        generateRoundedRect('%s', %u, %u, %u, %u, %u, %u, %s);
     ]]
-    RunJS(code:format(w, h, tl, tr, bl, br, ID))
+    RunJS(code:format(ID, w, h, tl, tr, bl, br, image_data))
 
     return ID
 end
@@ -196,8 +256,14 @@ local function DrawEx(r, x, y, w, h, col, rtl, rtr, rbl, rbr)
     DrawEx2(x, y, w, h, col, rtl, rtr, rbl, rbr)
 end
 
+local function DrawImage(r, x, y, w, h, col, image_id, image_data)
+    local ID = generate_rounded_rect(w, h, r, r, r, r, image_id, image_data)
+    internal_draw(ID, x, y, w, h, col)
+end
+
 return {
     Draw = Draw,
     DrawEx = DrawEx,
-    DrawEx2 = DrawEx2
+    DrawEx2 = DrawEx2,
+    DrawImage = DrawImage
 }
