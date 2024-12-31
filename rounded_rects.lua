@@ -103,16 +103,6 @@ local function get_id(w, h, tl, tr, bl, br)
     return w .. ";" .. h .. ";" .. tl .. ";" .. tr .. ";" .. bl .. ";" .. br
 end
 
-local function get_right_roundness(w, h, tl, tr, bl, br)
-    local max_roundness = math.min(w, h) / 2
-    tl, tr, bl, br =
-        math.min(tl, max_roundness),
-        math.min(tr, max_roundness),
-        math.min(bl, max_roundness),
-        math.min(br, max_roundness)
-    return tl, tr, bl, br
-end
-
 -- we can't run JS code until the page is loaded
 local function RunJS(code)
     if html:IsLoading() then
@@ -124,8 +114,20 @@ local function RunJS(code)
     end
 end
 
+local function math_floor_min(a, b)
+    return (math.floor(math.min(a, b)))
+end
+
 local function generate_rounded_rect(w, h, tl, tr, bl, br)
-    tl, tr, bl, br = get_right_roundness(w, h, tl, tr, bl, br)
+    w, h = math.floor(w), math.floor(h)
+
+    local max_roundness = math.min(w, h) / 2
+    tl, tr, bl, br =
+        math_floor_min(tl, max_roundness),
+        math_floor_min(tr, max_roundness),
+        math_floor_min(bl, max_roundness),
+        math_floor_min(br, max_roundness)
+
     local ID = get_id(w, h, tl, tr, bl, br)
 
     if QUEUED[ID] or MATERIALS[ID] then
